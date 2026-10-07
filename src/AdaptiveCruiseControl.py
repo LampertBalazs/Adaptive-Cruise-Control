@@ -34,7 +34,7 @@ class Vehiclemodell:
         self.x +=self.v*dt +0.5*a*(dt**2)
         self.v +=a*dt
 
-        # Ha ez nincs tolatni fog, de nelünk az nyem jó
+         #Ha ez nincs tolatni fog, de nelünk az nyem jó
         if self.v < 0:
             self.v = 0
         return self.x, self.v
@@ -42,29 +42,32 @@ class Vehiclemodell:
 
 #szimulációs paraméterek
 dt=0.05
-t_szimidő=40.00
+t_szimidő=30.00
 ido=np.arange(0,t_szimidő,dt)
 steps=len(ido)
 
 #initializálás
 host= Vehiclemodell(x0=0.0,v0=20.0)
-vasalóswift_x=80.0
-vasalóswift_v=20.0
+vasalóswift_x=40.0
+vasalóswift_v=30.0
 
-d0=10.0 #követési táv állva
-T_köv=1.5 #követési idő 
-Kp=600 #P tag PID
-Kd=300 #D tag pid
+d0=1#követési táv állva
+T_köv=6 #követési idő 
+Kp=500 #P tag PID
+Kd=300#D tag pid
+Ki=300 #I tag pid
 
 #adattároló
-data={'ido':[], 'host_x':[], 'host_v':[], 'vasalóswift_x':[], 'vasalóswift_v':[], 'distance':[], 'desired_distance':[]}
+data={'ido':[], 'host_x':[], 'host_v':[], 'vasalóswift_x':[], 'vasalóswift_v':[], 'distance':[], 'desired_distance':[], 'F_h':[], 'F_f':[]}
 
 
 #szimuláció
 for t in ido:
 
-    if t>15.0:
-        vasalóswift_v=max(12.0,vasalóswift_v-0.5*dt) #lassítás
+    if t>10 and t<50:
+        vasalóswift_v=max(25,vasalóswift_v-0.5*dt) #lassítás
+        vasalóswift_x+=vasalóswift_v*dt
+    else:
         vasalóswift_x+=vasalóswift_v*dt
 
 
@@ -76,14 +79,18 @@ for t in ido:
     d_köv=d0+T_köv*host_v
 
     #hibaszámítás
-    hiba=(vasalóswift_x-host_x)-d_köv
-
-    #sebességkülönbség számítása
-    delta_v=vasalóswift_v-host_v
+    act_tav=vasalóswift_x-host_x
+    hiba_poz=act_tav-d_köv
+    error_v=vasalóswift_v-host_v
+    error_i=+ hiba_poz*dt
+    error_i=np.clip(error_i,-3000,3000) #integráló tag korlátozása
+    
+    u=Kp*hiba_poz+Kd*error_v +Ki*error_i
+    
 
     #PID szabályozó (P+D)
-    F_h=Kp*hiba+Kd*delta_v
-    F_f=0.0
+    F_h=max(0.0,u) if u>0 else 0.0
+    F_f=min(3000.0,abs(u)) if u<0 else 0.0
 
     #modell léptetése
     host_x, host_v=host.step(F_h,F_f,dt)
@@ -94,12 +101,13 @@ for t in ido:
     data['host_v'].append(host_v)
     data['vasalóswift_x'].append(vasalóswift_x)
     data['vasalóswift_v'].append(vasalóswift_v)
-    data['distance'].append(vasalóswift_x - host_x)
+    data['distance'].append(act_tav)
     data['desired_distance'].append(d_köv)
-
+    data['F_h'].append(F_h)
+    data['F_f'].append(F_f)
 
 plt.figure(figsize=(10,10))
-plt.subplot(2,1,1)
+plt.subplot(4,1,1)
 plt.plot(data['ido'],data['host_v'],label="Host velocity")
 plt.plot(data['ido'],data['vasalóswift_v'],label="Vasalóswift velocity")
 plt.xlabel("Time [s]")
@@ -108,7 +116,7 @@ plt.legend()
 plt.title("Adaptive Cruise Control Simulation")
 plt.grid(True)
 
-plt.subplot(2,1,2)
+plt.subplot(4,1,2)
 plt.plot(data['ido'],data['distance'],label="Actual Distance")
 plt.plot(data['ido'],data['desired_distance'],label="Desired Distance")
 plt.xlabel("Time [s]")
@@ -116,6 +124,26 @@ plt.ylabel("Distance [m]")
 plt.legend()
 plt.title("Distance Control")
 plt.grid(True)
+
+plt.subplot(4,1,3)
+plt.plot(data['ido'],data['host_x'],label="Host Position")
+plt.plot(data['ido'],data['vasalóswift_x'],label="Vasalóswift Position")
+plt.xlabel("Time [s]")
+plt.ylabel("Distance [m]")
+plt.legend()
+plt.title("pozíció")
+plt.grid(True)
+
+plt.subplot(4,1,4)
+plt.plot(data['ido'],data['F_h'],label="Hajtóerő")
+plt.plot(data['ido'],data['F_f'],label="Fékerő")
+plt.xlabel("Time [s]")
+plt.ylabel("Force [N]")
+plt.legend()
+plt.title("Erők")
+plt.grid(True)
+
+
 
 plt.tight_layout()
 plt.show()
